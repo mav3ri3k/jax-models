@@ -1,0 +1,17 @@
+seed = 69
+epochs = 12
+batch_size = 128
+eval = false
+
+image_size = 32
+patch_size = 4
+layers = 12
+use_bias = false
+num_heads = 3
+embed_dim = 192
+channels = 3
+num_classes = 10
+learning_rate = 3e-3
+
+ffn_dim = 768
+

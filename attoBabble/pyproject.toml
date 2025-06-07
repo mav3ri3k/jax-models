@@ -1,12 +1,15 @@
 [project]
-name = "jax-models"
+name = "attobabble"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "absl-py>=2.3.0",
     "flax>=0.10.4",
     "jax==0.4.38",
     "optax>=0.2.4",
     "polars>=1.30.0",
+    "sentencepiece>=0.2.0",
+    "tqdm>=4.67.1",
 ]

@@ -1,5 +1,5 @@
 def main():
-    print("Hello from jax-models!")
+    print("Hello from resnet!")
 
 
 if __name__ == "__main__":
