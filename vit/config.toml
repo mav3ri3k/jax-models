@@ -1,12 +1,12 @@
 seed = 69
-epochs = 12
-batch_size = 128
+epochs = 2
+batch_size = 32
 learning_rate = 0.003
 weight_decay  = 0.03
 eval = false
 
 image_size = 32
-patch_size = 4
+patch_size = 8
 layers = 12
 use_bias = false
 num_heads = 3
