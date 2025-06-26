@@ -26,14 +26,13 @@ class TBlock(nnx.Module):
         # parallel formulation
         x_BLD = self.ln1(in_BLD)
         x_BLD = self.atn(x_BLD)
+        x_BLD += in_BLD
 
-        y_BLD = self.ln2(in_BLD)
-        x_BLD += y_BLD 
+        y_BLD = self.ln2(x_BLD)
+        y_BLD = self.ffn(y_BLD) 
+        y_BLD += x_BLD 
 
-        z_BLD = self.ffn(x_BLD) 
-        z_BLD += x_BLD
-
-        return z_BLD
+        return y_BLD
 
 
 class Encoder(nnx.Module):

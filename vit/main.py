@@ -126,3 +126,5 @@ def main():
         # manager.wait_until_finished()
         # print(f"💾 Checkpointed epoch {epoch}")
 
+main()
+
