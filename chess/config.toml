@@ -1,0 +1,15 @@
+seed = 69
+epochs = 1
+batch_size = 32
+learning_rate = 3e-3
+weight_decay  = 3e-4
+eval = false
+
+layers = 7
+use_bias = false
+num_heads = 4
+embed_dim = 256
+num_classes = 10
+
+ffn_dim = 384
+

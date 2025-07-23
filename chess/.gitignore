@@ -1,0 +1,6 @@
+**/*.npz
+checkpoints/
+data/
+**/*.bag
+**/*.pgn
+**/*.zst
