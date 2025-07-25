@@ -1340,8 +1340,10 @@ dependencies = [
     { name = "orbax-checkpoint" },
     { name = "pillow" },
     { name = "polars" },
+    { name = "pyarrow" },
     { name = "rich" },
     { name = "tqdm" },
+    { name = "xxhash" },
 ]
 
 [package.metadata]
@@ -1355,8 +1357,10 @@ requires-dist = [
     { name = "orbax-checkpoint", specifier = ">=0.11.5" },
     { name = "pillow", specifier = ">=11.2.1" },
     { name = "polars", specifier = ">=1.31.0" },
+    { name = "pyarrow", specifier = ">=20.0.0" },
     { name = "rich", specifier = ">=14.0.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
+    { name = "xxhash", specifier = ">=3.5.0" },
 ]
 
 [[package]]
