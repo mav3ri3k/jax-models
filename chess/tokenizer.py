@@ -24,11 +24,39 @@ if not lg.handlers:
 
 
 class Tokenizer:
+    @staticmethod
+    def _pad_right(s: str, length: int) -> str:
+        return (s + '.' * length)[:length]
+
+    @classmethod
+    def _pad_fen(self, fen: str) -> str:
+        board, turn, castling, ep, halfmove, fullmove = fen.split()
+
+        # 1–64 : piece placement (8*8 = 64)
+        board = board.replace('/', '')               # remove '/'
+        board = self._pad_right(board, 64)
+
+        # 66–69  : castling (KQkq), padded right with '.'
+        castling = self._pad_right(castling, 4)
+
+        # 70–71  : en-passant square ('-' or two chars like 'e3')
+        ep = self._pad_right(ep, 2)
+
+        # 72–73  : halfmove clock (2 digits, zero-padded)
+        halfmove = self._pad_right(halfmove, 2)
+
+        # 74–76  : fullmove number (3 digits, zero-padded)
+        fullmove = self._pad_right(fullmove, 3)
+
+        fixed = board + turn + castling + ep + halfmove + fullmove
+        assert len(fixed) == 76, f"Length {len(fixed)} != {76}"
+        return fixed
+
     @classmethod
     def _builder_fen(self, pgn_source, n_jobs: int = -1) -> List:
 
         batch_size = 1
-        limit = 1_00
+        limit = None
         lg.info("Fen Builder Start")
 
         # ---------- 1) Fast scan: get byte offsets for each game ----------
@@ -60,7 +88,7 @@ class Tokenizer:
                     for mv in game.mainline_moves():
                         board.push(mv)
                         # You were building a *character* set from FEN strings:
-                        local_chars.update(board.fen())
+                        local_chars.update(self._pad_fen(board.fen()))
             return local_chars
 
         # Slice offsets into batches so each task amortizes file open/seek cost
@@ -121,7 +149,7 @@ class Tokenizer:
 
     def __init__(self, pgn_source, force_new = False):
         lg.info("Tokenizer Initialized")
-        if not os.path.isfile("./data/tokenizer.avro") or force_new:
+        if not os.path.isfile("./data/tokenizer.parquet") or force_new:
             all_uci = self._builder_move()
             start_time = time.time()
             all_chars = self._builder_fen(pgn_source)
@@ -136,33 +164,57 @@ class Tokenizer:
                 tokens.append(token)
             vocab = {"idx": idx, "tokens": tokens}
 
-            df = pl.DataFrame(vocab)
-            df.write_avro("./data/tokenizer.avro")
+            df = pl.DataFrame(vocab, schema={"idx": pl.Int16, "tokens": pl.String})
+            df.write_parquet("./data/tokenizer.parquet")
 
-    def encode(self, token: str) -> int:
-        df = pl.read_avro("./data/tokenizer.avro")
+    def encode(self, tokens: str, save_at="./data/tokenizer.parquet") -> List[int]:
+        """Supports both fen string and move string"""
+        # lg.debug(f"Encoder Saved at: {save_at}")
+        df = pl.read_parquet(save_at)
+
+        # fen string
+        if len(tokens) > 7:
+            token_ids: List[int] = []
+            tokens = self._pad_fen(tokens)
+            for token in tokens:
+                df_filter = df.filter(pl.col("tokens") == token)
+                assert df_filter.height == 1, f"Failed for token: {token}, response: {df_filter}"
+
+                token_ids.append(df_filter["idx"].item())
+
+            return token_ids
+    
+        #move is considered one token
+        token = tokens
         df_filter = df.filter(pl.col("tokens") == token)
-        assert df_filter.height == 1
+        assert df_filter.height == 1, f"Failed for token: {token}, response: {df_filter}"
 
-        return df_filter["idx"].item()
+        return [df_filter["idx"].item() - 32]
 
-    def decode(self, token_id: int) -> str:
-        df = pl.read_avro("./data/tokenizer.avro")
-        df_filter = df.filter(pl.col("idx") == token_id)
-        assert df_filter.height == 1
+    def decode(self, token_ids: List[int], read_from="./data/tokenizer.parquet") -> str:
+        lg.debug(f"Decoder Read_from: {read_from}")
+        df = pl.read_parquet(read_from)
+        lg.info(f"Dataframe schema found: {df.schema}")
 
-        return df_filter["tokens"].item()
+        tokens: List[str] = []
+        for token_id in token_ids:
+            df_filter = df.filter(pl.col("idx") == token_id)
+            assert df_filter.height == 1
+
+            tokens.append(df_filter["tokens"].item())
+
+        return tokens
 
 if __name__ == "__main__":
     tokenizer = Tokenizer(pgn_source="./lichess_db_standard_rated_2014-07.pgn", force_new = True)
 
     fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    for c in fen:
-        token_id = tokenizer.encode(c)
-        token = tokenizer.decode(token_id)
-        print(f"Id: {token_id}, token: {token}")
+    token_ids = tokenizer.encode(fen)
+    token = tokenizer.decode(token_ids)
+    token = "".join(token)
+    print(f"Id: {token_ids}, token: {token}, fen: {fen}")
     print()
     uci = "e2e4"
-    token_id = tokenizer.encode(uci)
-    token = tokenizer.decode(token_id)
-    print(f"Id: {token_id}, token: {token}")
+    token_ids = tokenizer.encode(uci)
+    token = tokenizer.decode(token_ids)
+    print(f"Id: {token_ids}, token: {token}")
