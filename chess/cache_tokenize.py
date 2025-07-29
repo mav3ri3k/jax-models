@@ -19,7 +19,7 @@ def process_batch(df: pl.DataFrame) -> pl.DataFrame:
     for row in df.iter_rows(named=True):
         try:
             a = tokenizer.encode(row["fen_boards"])
-            b = tokenizer.encode(row["stk_moves"])
+            b = tokenizer.encode(row["stk_moves"])[0]
             tokenized_boards.append(a)
             tokenized_moves.append(b)
         except AssertionError:

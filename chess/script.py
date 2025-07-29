@@ -10,7 +10,17 @@ with open("./data/pre_tokenized/cache_tokenized.arrow", "rb") as f:
     table = reader.read_all()
     # Convert to pandas
     df = pl.from_arrow(table)
+    print(df.schema)
+    # df.with_columns(
+    #     # pl.col("boards").cast(pl.List(pl.Float64)),
+    #     pl.col("boards").apply(lambda x: [float(i) for i in x]).alias("boards"),
+    #     # pl.col("moves").cast(pl.Float64)
+    # )
+
+    arrays = df.to_jax("dict")
+
+    print(arrays)
     # df = table.to_pandas()
-    print(df.head(5))
-    print(type(df))
-    print(df.height)
+    # print(df.head(5))
+    # print(type(df))
+    # print(df.height)
