@@ -4,12 +4,14 @@ batch_size = 32
 learning_rate = 3e-3
 weight_decay  = 3e-4
 eval = false
+vocab_size = 32
+ctx_len = 77
 
 layers = 7
 use_bias = false
 num_heads = 4
 embed_dim = 256
-num_classes = 10
+num_classes = 1944
 
 ffn_dim = 384
 

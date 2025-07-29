@@ -7,7 +7,7 @@ import pyarrow as pa
 import pyarrow.ipc as ipc
 
 input_path = "./data/fen_boards/board_move_0.parquet"
-output_path = "./data/pre_tokenized/cache_tokenized.arrow"
+output_path = "./data/pre_tokenized/cache_tokenized_float.arrow"
 tokenizer = Tokenizer("None")
 batch_size = 1_000
 num_workers = 4  # Adjust based on CPU cores

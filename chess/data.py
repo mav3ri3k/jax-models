@@ -164,7 +164,7 @@ def stockfish_best_moves(count, movetime_ms: int = 50):
         fens = df["unique_fen_boards"].to_list()
 
         mini_batch_limit = None
-        chunk_limit = None
+        chunk_limit = 10_000
         # build chunks once so we know how many there are
         chunks = [fens[i:i+CHUNK_GAMES] for i in range(0, len(fens), CHUNK_GAMES)]
         if mini_batch_limit != None:
@@ -212,9 +212,28 @@ def prepare_data(force_boards=False, force_moves=False, force_tokenization=False
         lg.info("Using pre-computed parquet files for board-move pair")
 
 
-def load_data(pgn_source, force_new = False):
-    lg.info("Tokenizer Initialized")
-    if not os.path.isfile("./data/unique_fen_boards.parquet") or force_new:
-        prepare_data()
+# prepare_data(force_boards=False, force_moves=True, force_tokenization=True)
 
-prepare_data(force_boards=False, force_moves=False, force_tokenization=True)
+def load_data(pgn_source, force_new = False):
+    f =  open("./data/pre_tokenized/cache_tokenized.arrow", "rb")
+    reader = ipc.RecordBatchStreamReader(f)
+    # Read all batches and convert to a PyArrow Table
+    i = 0
+    total = 0
+    flag = True
+    try:
+        while True:
+            i += 1
+            batch = reader.read_next_batch()
+            df = pl.from_arrow(batch)
+            total += df.height
+
+            if flag:
+                flag = not flag
+                print(df.shape)
+                print(df.height)
+    except StopIteration:
+        pass
+    print(i)
+    print(total)
+    f.close()

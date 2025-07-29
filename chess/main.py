@@ -6,6 +6,9 @@ import flax.nnx as nnx
 import time
 import optax
 import tomllib
+import polars as pl
+import pyarrow as pa
+import pyarrow.ipc as ipc
 from pathlib import Path
 from tqdm import tqdm, trange
 
@@ -16,15 +19,7 @@ from data import prepare_data, load_data
 from model import VisionTransformer
 from train import train_step, eval_step
 
-# data
-if not Path("cifar10_uint8.npz").exists():
-    prepare_data()
-
-data = load_data()
-train_images = jnp.asarray(data["train_images"])  # shape (50000,32,32,3), dtype uint8
-train_labels = jnp.asarray(data["train_labels"])  # shape (50000,), dtype int64
-test_images  = jnp.asarray(data["test_images"])   # shape (10000,32,32,3)
-test_labels  = jnp.asarray(data["test_labels"])   # shape (10000,)
+data_file = "./data/pre_tokenized/cache_tokenized.arrow"
 
 # config
 with open("config.toml", "rb") as f:
@@ -38,28 +33,43 @@ metrics = nnx.MultiMetric(
   accuracy=nnx.metrics.Accuracy(),
   loss=nnx.metrics.Average('loss'),
 )
+
 print("TRAIN")
 for epoch in trange(cfg["epochs"]):
     print(f"Epoch {epoch+1}")
 
-    num_train = train_images.shape[0]
-    batch_size = cfg['batch_size']
-
-    perm = jax.random.permutation(jax.random.PRNGKey(epoch), num_train)
-    shuffled_imgs = train_images[perm]
-    shuffled_lbls = train_labels[perm]
-
-    batches = [
-        {"images": shuffled_imgs[i : i + batch_size],
-         "labels": shuffled_lbls[i : i + batch_size]}
-        for i in range(0, num_train, batch_size)
-    ]
-
-    # time an epoch
     start_time = time.time()
-    for batch in tqdm(batches):
-        train_step(model, optimizer, metrics, batch)
 
+    with open(data_file, "rb") as f:
+        reader = ipc.RecordBatchStreamReader(f)
+
+        total_record_batches = 10
+        # for  _ in reader.iter_batches_with_custom_metadata():
+        #     total_record_batches += 1
+
+        # time an epoch
+        j = 1
+        for batch in tqdm(reader.iter_batches_with_custom_metadata(), total=total_record_batches):
+            batch_size = 50
+            df = pl.from_arrow(batch[0])
+
+            # assert df.height % batch_size == 0, f"{df.height}, {batch_size}"
+
+            df_mini = [df[i:i+batch_size] for i in range(0, df.height, batch_size)]
+            for df in df_mini:
+                moves = df.get_column("moves").to_jax()
+                boards = df.get_column("boards").to_list()
+                boards = jnp.asarray(boards)
+
+                batch = {"boards": boards, "moves": moves}
+
+                train_step(model, optimizer, metrics, batch)
+
+            j += 1
+            if j > total_record_batches:
+                break
+
+    print(metrics)
     m = metrics.compute()
     print(f"  Accuracy: {m['accuracy']}, Loss: {m['loss']}" )
     metrics.reset()
@@ -69,6 +79,7 @@ for epoch in trange(cfg["epochs"]):
     print(f"  Training took: {duration:.4f} seconds")
 
 # test
+"""
 print("TEST")
 test_metrics = nnx.MultiMetric(
             accuracy=nnx.metrics.Accuracy(),
@@ -86,3 +97,4 @@ for i in range(0, num_test, cfg['batch_size']):
 m = test_metrics.compute()
 print(f"  Accuracy: {m['accuracy']}, Loss: {m['loss']}" )
 metrics.reset()
+"""

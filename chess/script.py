@@ -3,24 +3,9 @@ import pyarrow as pa
 
 import pyarrow.ipc as ipc
 import pandas as pd
+from tqdm import tqdm
+import jax.numpy as jnp
 
-with open("./data/pre_tokenized/cache_tokenized.arrow", "rb") as f:
-    reader = ipc.RecordBatchStreamReader(f)
-    # Read all batches and convert to a PyArrow Table
-    table = reader.read_all()
-    # Convert to pandas
-    df = pl.from_arrow(table)
-    print(df.schema)
-    # df.with_columns(
-    #     # pl.col("boards").cast(pl.List(pl.Float64)),
-    #     pl.col("boards").apply(lambda x: [float(i) for i in x]).alias("boards"),
-    #     # pl.col("moves").cast(pl.Float64)
-    # )
-
-    arrays = df.to_jax("dict")
-
-    print(arrays)
-    # df = table.to_pandas()
-    # print(df.head(5))
-    # print(type(df))
-    # print(df.height)
+df = pl.read_parquet("./data/tokenizer_output.parquet")
+print(df)
+print(df.schema, df.height)

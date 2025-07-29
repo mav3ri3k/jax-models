@@ -39,9 +39,7 @@ class Encoder(nnx.Module):
     def __init__(self, cfg, *, rngs: nnx.Rngs):
         self.N = cfg['layers']
 
-        i = cfg['image_size']
-        p = cfg['patch_size']
-        pos_emb_shape = (1, int((i/p)*(i/p)) + 1, cfg['embed_dim'])
+        pos_emb_shape = (1, cfg['ctx_len'], cfg['embed_dim'])
         self.pos_embed = nnx.Param(jax.nn.initializers.normal(0.02)(jax.random.key(cfg['seed']), pos_emb_shape, jnp.float32))
 
         self.blocks = [TBlock(cfg=cfg, rngs=rngs) for _ in range(self.N)]
@@ -62,10 +60,7 @@ class Encoder(nnx.Module):
 
 class VisionTransformer(nnx.Module):
     def __init__(self, cfg, *, rngs: nnx.Rngs):
-        p = cfg['patch_size']
-        patch = (p, p)
-
-        self.conv = nnx.Conv(in_features=cfg['channels'], out_features=cfg['embed_dim'], kernel_size=patch, strides=patch, padding='VALID', rngs=rngs)
+        self.embed = nnx.Embed(num_embeddings=cfg['vocab_size'], features=cfg['embed_dim'], rngs=rngs)
         self.class_token = nnx.Param(jax.nn.initializers.zeros(jax.random.key(cfg['seed']), (1, 1, cfg['embed_dim']), jnp.float32))
 
         self.encoder = Encoder(cfg, rngs=rngs)
@@ -73,15 +68,13 @@ class VisionTransformer(nnx.Module):
         self.out = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['num_classes'], rngs=rngs)
 
 
-    def __call__(self, x_BHWC):
+    def __call__(self, x_BL):
         # We can merge s2d+emb into a single conv; it's the same.
-        x_BPPD = self.conv(x_BHWC)
 
-        b, h, w, d = x_BPPD.shape
-        x_BLD = jnp.reshape(x_BPPD, [b, h*w, d])
+        x_BLD = self.embed(x_BL)
 
         # Add [class] token
-        cls = jnp.tile(self.class_token, [b, 1, 1])  
+        cls = jnp.tile(self.class_token, [x_BLD.shape[0], 1, 1])  
         x_BLD = jnp.concatenate([cls, x_BLD], axis=1)
 
         # main transformer encoder
