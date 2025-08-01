@@ -4,3 +4,6 @@ data/
 **/*.bag
 **/*.pgn
 **/*.zst
+
+**/.DS_Store
+**/.env

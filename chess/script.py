@@ -5,7 +5,9 @@ import pyarrow.ipc as ipc
 import pandas as pd
 from tqdm import tqdm
 import jax.numpy as jnp
+from checkpoint import save_checkpoint
+from upload import upload
 
-df = pl.read_parquet("./data/tokenizer_output.parquet")
-print(df)
-print(df.schema, df.height)
+upload("./checkpoints/32")
+
+
