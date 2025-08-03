@@ -16,16 +16,26 @@ class Ffn(nnx.Module):
 
 class TBlock(nnx.Module):
     def __init__(self, cfg, *, rngs: nnx.Rngs):
-        self.atn = nnx.MultiHeadAttention(num_heads=cfg['num_heads'], in_features=cfg['embed_dim'], decode=False, rngs=rngs)
+        self.linearq = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
+        self.lineark = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
+        self.linearv = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
+        self.lnq = nnx.RMSNorm(num_features=cfg['embed_dim'], rngs=rngs)
+        self.lnk = nnx.RMSNorm(num_features=cfg['embed_dim'], rngs=rngs)
+
+        self.atn = nnx.MultiHeadAttention(num_heads=cfg['num_heads'], in_features=cfg['embed_dim'], decode=False, normalize_qk=True, rngs=rngs)
         self.ffn = Ffn(cfg=cfg, rngs=rngs)
-        self.ln1 = nnx.LayerNorm(num_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs)
-        self.ln2 = nnx.LayerNorm(num_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs)
+        self.ln1 = nnx.RMSNorm(num_features=cfg['embed_dim'], rngs=rngs)
+        self.ln2 = nnx.RMSNorm(num_features=cfg['embed_dim'], rngs=rngs)
 
     def __call__(self, in_BLD: jnp.ndarray) -> jnp.ndarray:
         # order of layernorm based on palm
         # parallel formulation
         x_BLD = self.ln1(in_BLD)
-        x_BLD = self.atn(x_BLD)
+        q_BLD = self.linearq(x_BLD)
+        k_BLD = self.lineark(x_BLD)
+        v_BLD = self.linearv(x_BLD)
+
+        x_BLD = self.atn(q_BLD, k_BLD, v_BLD)
         x_BLD += in_BLD
 
         y_BLD = self.ln2(x_BLD)
@@ -44,7 +54,7 @@ class Encoder(nnx.Module):
 
         self.blocks = [TBlock(cfg=cfg, rngs=rngs) for _ in range(self.N)]
 
-        self.out_ln = nnx.LayerNorm(num_features=cfg['embed_dim'], use_bias=cfg['use_bias'], use_scale=False, rngs=rngs)
+        self.out_ln = nnx.RMSNorm(num_features=cfg['embed_dim'], use_scale=False, rngs=rngs)
 
 
     def __call__(self, x_BLD):
@@ -83,7 +93,7 @@ class VisionTransformer(nnx.Module):
         # extract [class] token
         x_BD = x_BLD[:, 0]
 
-        # find class, one-hot
+        # find class
         x_BC = self.out(x_BD)
         
         return x_BC
