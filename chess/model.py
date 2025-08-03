@@ -4,38 +4,59 @@ import jax.numpy as jnp
 
 class Ffn(nnx.Module):
     def __init__(self, cfg, *, rngs: nnx.Rngs):
-        self.linear1 = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['ffn_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
-        self.linear2 = nnx.Linear(in_features=cfg['ffn_dim'], out_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
+        self.gate = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['ffn_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
+        self.value = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['ffn_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
+        self.out = nnx.Linear(in_features=cfg['ffn_dim'], out_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
 
     def __call__(self, x_BLD: jnp.ndarray) -> jnp.ndarray:
-        x_BLF = self.linear1(x_BLD)
-        x_BLF = nnx.gelu(x_BLF)
-        x_BLD = self.linear2(x_BLF)
+        x_BLF = self.gate(x_BLD)
+        x_BLF = nnx.swish(x_BLF)
 
-        return x_BLD
+        y_BLF = self.value(x_BLD)
+
+        y_BLF *= x_BLF        
+        z_BLD = self.out(y_BLF)
+
+        return z_BLD
+
+class Attention(nnx.Module):
+    def __init__(self, cfg, *, rngs: nnx.Rngs):
+        assert cfg['embed_dim'] % cfg['num_heads'] == 0, f"{embed_dim} and {num_heads} are not divisible"
+        self.Dh = cfg['embed_dim'] // cfg['num_heads']
+        self.q = nnx.LinearGeneral(in_features=cfg['embed_dim'], out_features=(cfg['num_heads'], self.Dh), axis=-1, use_bias=cfg['use_bias'], rngs=rngs)
+        self.k = nnx.LinearGeneral(in_features=cfg['embed_dim'], out_features=(cfg['num_heads'], self.Dh), axis=-1, use_bias=cfg['use_bias'], rngs=rngs)
+        self.v = nnx.LinearGeneral(in_features=cfg['embed_dim'], out_features=(cfg['num_heads'], self.Dh), axis=-1, use_bias=cfg['use_bias'], rngs=rngs)
+
+        self.normq = nnx.RMSNorm(num_features=self.Dh, rngs=rngs)
+        self.normk = nnx.RMSNorm(num_features=self.Dh, rngs=rngs)
+
+        self.out = nnx.LinearGeneral(in_features=(cfg['num_heads'], self.Dh), out_features=cfg['embed_dim'], axis=(-2, -1), use_bias=cfg['use_bias'], rngs=rngs)
+
+    
+    def __call__(self, x_BLD: jnp.ndarray) -> jnp.ndarray:
+        q_BLHDh = self.q(x_BLD)
+        q_BLHDh = self.normq(q_BLHDh)
+
+        k_BLHDh = self.k(x_BLD)
+        k_BLHDh = self.normk(k_BLHDh)
+
+        v_BLHDh = self.v(x_BLD)
+
+        a_BLHDh = nnx.dot_product_attention(q_BLHDh, k_BLHDh, v_BLHDh)
+
+        a_BLD = self.out(a_BLHDh)
+        return a_BLD
 
 class TBlock(nnx.Module):
     def __init__(self, cfg, *, rngs: nnx.Rngs):
-        self.linearq = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
-        self.lineark = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
-        self.linearv = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['embed_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
-        self.lnq = nnx.RMSNorm(num_features=cfg['embed_dim'], rngs=rngs)
-        self.lnk = nnx.RMSNorm(num_features=cfg['embed_dim'], rngs=rngs)
-
-        self.atn = nnx.MultiHeadAttention(num_heads=cfg['num_heads'], in_features=cfg['embed_dim'], decode=False, normalize_qk=True, rngs=rngs)
+        self.atn = Attention(cfg=cfg, rngs=rngs)
         self.ffn = Ffn(cfg=cfg, rngs=rngs)
         self.ln1 = nnx.RMSNorm(num_features=cfg['embed_dim'], rngs=rngs)
         self.ln2 = nnx.RMSNorm(num_features=cfg['embed_dim'], rngs=rngs)
 
     def __call__(self, in_BLD: jnp.ndarray) -> jnp.ndarray:
-        # order of layernorm based on palm
-        # parallel formulation
         x_BLD = self.ln1(in_BLD)
-        q_BLD = self.linearq(x_BLD)
-        k_BLD = self.lineark(x_BLD)
-        v_BLD = self.linearv(x_BLD)
-
-        x_BLD = self.atn(q_BLD, k_BLD, v_BLD)
+        x_BLD = self.atn(x_BLD)
         x_BLD += in_BLD
 
         y_BLD = self.ln2(x_BLD)

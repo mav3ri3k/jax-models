@@ -29,11 +29,13 @@ path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
 with open("config.toml", "rb") as f:
     cfg = tomllib.load(f)
 
-trackio.init(project="chess-encoder", name="4 ln-qk-norm", config=cfg)
+trackio.init(project="chess-encoder", name="9 EBM xxs hyper-param", config=cfg)
 
 # model
 model = VisionTransformer(cfg, rngs=nnx.Rngs(cfg['seed']))
-optimizer = nnx.Optimizer(model, optax.adamw(cfg['learning_rate']))
+# nnx.display(model)
+# sys.exit()
+optimizer = nnx.Optimizer(model, optax.adamw(learning_rate=cfg['learning_rate'], b1=cfg['b1'], b2=cfg['b2'], weight_decay=cfg['weight_decay']))
 
 
 metrics = nnx.MultiMetric(

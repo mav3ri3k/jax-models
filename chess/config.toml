@@ -5,16 +5,18 @@ seed = 69
 epochs = 1
 batch_size = 25
 learning_rate = 1.2e-3
-weight_decay  = 3e-4
+b1 = 0.9
+b2 = 0.999
+weight_decay  = 1e-2
 eval = false
 vocab_size = 32
 ctx_len = 77
 
-layers = 10
+layers = 6
 use_bias = false
 num_heads = 6
 embed_dim = 384
 num_classes = 1944
 
-ffn_dim = 576
+ffn_dim = 384
 
