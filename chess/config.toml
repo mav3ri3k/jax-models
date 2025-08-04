@@ -1,5 +1,6 @@
 # to be manually updated
 last_checkpoint = false
+upload = false
 
 seed = 69
 epochs = 1
@@ -15,6 +16,7 @@ ctx_len = 77
 layers = 6
 use_bias = false
 num_heads = 6
+base_f = 5_000
 embed_dim = 384
 num_classes = 1944
 

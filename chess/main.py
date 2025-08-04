@@ -29,7 +29,7 @@ path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
 with open("config.toml", "rb") as f:
     cfg = tomllib.load(f)
 
-trackio.init(project="chess-encoder", name="9 EBM xxs hyper-param", config=cfg)
+trackio.init(project="chess-encoder", name="15 rope-8000", config=cfg)
 
 # model
 model = VisionTransformer(cfg, rngs=nnx.Rngs(cfg['seed']))
@@ -100,7 +100,7 @@ with open(data_file, "rb") as f:
         metrics.reset()
 
         if step in [32, 160, 288, 416, 544, 640]:
-            save_checkpoint(model, f"./checkpoints/{step}")
+            save_checkpoint(model, f"./checkpoints/{step}", cfg)
         step += 1
 
 end_time = time.time()

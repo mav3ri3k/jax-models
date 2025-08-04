@@ -15,7 +15,7 @@ try:
 except ImportError:
     colab = False
 
-def save_checkpoint(model, rel_path):
+def save_checkpoint(model, rel_path, cfg):
     # rel_path = "./checkpoints/one"
     ckpt_dir = os.path.abspath(rel_path)
 
@@ -34,7 +34,8 @@ def save_checkpoint(model, rel_path):
             else:
                 print("[red]Checkpoint save aborted[/red]")
                 return False
-    upload(rel_path)
+    if cfg['upload']:
+        upload(rel_path)
     return True
 
 def restore_checkpoint(model, rel_path, step):
