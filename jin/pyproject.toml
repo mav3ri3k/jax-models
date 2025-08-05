@@ -5,13 +5,20 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "boto3>=1.40.1",
+    "chess>=1.11.2",
     "datasets>=3.6.0",
+    "dotenv>=0.9.9",
     "flax>=0.10.4",
     "jax==0.4.38",
+    "joblib>=1.5.1",
     "optax>=0.2.5",
     "orbax-checkpoint>=0.11.5",
     "pillow>=11.2.1",
     "polars>=1.31.0",
+    "pyarrow>=20.0.0",
     "rich>=14.0.0",
     "tqdm>=4.67.1",
+    "trackio>=0.2.2",
+    "xxhash>=3.5.0",
 ]

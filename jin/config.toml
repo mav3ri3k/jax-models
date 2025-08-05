@@ -12,7 +12,7 @@ b2 = 0.999
 weight_decay  = 1e-2
 eval = false
 vocab_size = 32
-ctx_len = 77
+ctx_len = 64
 
 layers = 6
 use_bias = false
