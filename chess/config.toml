@@ -1,15 +1,15 @@
 # to be manually updated
-last_checkpoint = false
+last_checkpoint = 32
 checkpoint = false
 upload = false
 
 seed = 69
 epochs = 1
-batch_size = 25
-learning_rate = 1.2e-3
+batch_size = 512
+learning_rate = 6e-3
 b1 = 0.9
 b2 = 0.999
-weight_decay  = 1e-2
+weight_decay  = 3e-3
 eval = false
 vocab_size = 32
 ctx_len = 77

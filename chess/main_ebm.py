@@ -1,0 +1,181 @@
+import os
+import sys
+from rich import print
+import jax
+import jax.numpy as jnp
+import flax.nnx as nnx
+import time
+import optax
+import tomllib
+import polars as pl
+import pyarrow as pa
+import pyarrow.ipc as ipc
+import trackio
+from pathlib import Path
+from checkpoint import save_checkpoint, restore_checkpoint
+
+import orbax.checkpoint as ocp
+
+from data import prepare_data, load_data
+from model import Classifier, EBM
+from train import train_step, eval_step, train_step_ebm, eval_step_ebm
+
+# ---------- Paths ----------
+# NOTE: use the newly processed tokenized triplet file
+data_file = "./data/pre_tokenized/cache_tokenized_triplet.arrow"
+path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
+
+# ---------- Config ----------
+with open("config.toml", "rb") as f:
+    cfg = tomllib.load(f)
+
+trackio.init(project="chess-encoder", name="25 EBM Batch Lower LR", config=cfg)
+
+# ---------- Model / Optimizer / Metrics ----------
+model = EBM(cfg, rngs=nnx.Rngs(cfg['seed']))
+optimizer = nnx.Optimizer(
+    model,
+    optax.adamw(
+        learning_rate=cfg['learning_rate'],
+        b1=cfg['b1'],
+        b2=cfg['b2'],
+        weight_decay=cfg['weight_decay'],
+    ),
+)
+
+metrics = nnx.MultiMetric(
+    accuracy=nnx.metrics.Accuracy(),
+    loss=nnx.metrics.Average('loss'),
+)
+
+start_time = time.time()
+
+# ---------- Helper: convert a Polars slice to JAX batch ----------
+def df_to_batch(df: pl.DataFrame):
+    """
+    Expects columns:
+      - 'fen_board' : List[int]  (tokenized board; assumed fixed-length per row)
+      - 'stk_moves' : List[int]  (tokenized move; assumed single-token -> take idx 0)
+    Returns:
+      - dict with 'boards': jnp.int32 [B, L], 'moves': jnp.int32 [B]
+    """
+    # Boards
+    boards_list = df.get_column("fen_board").to_list()  # list[list[int]]
+    boards = jnp.asarray(boards_list, dtype=jnp.int32)
+
+    # Moves (take the first token of each list)
+    move_lists = df.get_column("stk_moves").to_list()   # list[list[int]]
+    try:
+        moves_vec = jnp.asarray([mv[0] for mv in move_lists], dtype=jnp.int32)
+    except Exception as e:
+        # If any row is empty or malformed, raise a clear error
+        raise ValueError("Expected each 'stk_moves' row to be a single-token list. "
+                         "Found an empty or malformed entry.") from e
+
+    return {"boards": boards, "moves": moves_vec}
+
+
+# ---------- Build a small test set once (from the same file) ----------
+# obtain test set
+with open(data_file, "rb") as f:
+    reader = ipc.RecordBatchStreamReader(f)
+    batch_size = cfg['batch_size']
+
+    test_i = 0
+    for batch in reader.iter_batches_with_custom_metadata():
+        test_i += 1
+        if test_i > 500:
+            df = pl.from_arrow(batch[0])
+            test_df_mini = [df[i:i+batch_size] for i in range(0, df.height, batch_size)]
+            test_i += 1
+            break
+
+# ---------- Training Loop ----------
+with open(data_file, "rb") as f:
+    reader = ipc.RecordBatchStreamReader(f)
+    batch_size = cfg['batch_size']
+    step = 1
+
+    last_checkpoint = cfg['last_checkpoint']
+    if last_checkpoint is not False:
+        try:
+            model = restore_checkpoint(model, f"./checkpoints/{last_checkpoint}", last_checkpoint)
+            print(f"[yellow]Start Training from {last_checkpoint}[/yellow]")
+        except UnboundLocalError:
+            print(f"[red]last_checkpoint: {last_checkpoint} given in config does not exist[/red]")
+            sys.exit()
+    else:
+        print(f"[yellow]Start Training from beginning[/yellow]")
+
+    for batch in reader.iter_batches_with_custom_metadata():  # (RecordBatch)
+        # skip ahead if resuming
+        if last_checkpoint is not False and step <= last_checkpoint:
+            step += 1
+            continue
+
+        df = pl.from_arrow(batch[0])  # columns: fen_board, stk_moves, human_moves (all tokenized)
+        # chunk into mini-batches
+        df_mini = [df[i:i+batch_size] for i in range(0, df.height, batch_size)]
+
+        # shuffle mini-batches per step for SGD
+        step_key = jax.random.PRNGKey(step)
+        shuffled_indices = jax.random.permutation(step_key, len(df_mini))
+        df_mini = [df_mini[int(i)] for i in list(shuffled_indices)]
+
+        # ---- train over this Arrow batch ----
+        for df in df_mini:
+            stk_moves = df.get_column("stk_moves").to_list()
+            stk_moves = jnp.asarray(stk_moves)
+            human_moves = df.get_column("human_moves").to_list()
+            human_moves = jnp.asarray(human_moves)
+            boards = df.get_column("fen_board").to_list()
+            boards = jnp.asarray(boards)
+
+            batch = {"boards": boards, "stk_moves": stk_moves, "human_moves": human_moves}
+
+            train_step_ebm(model, optimizer, metrics, batch)
+
+        # log train metrics
+        m = metrics.compute()
+        train_acc = m['accuracy'].item(0)
+        train_loss = m['loss'].item(0)
+        metrics.reset()
+
+        # ---- eval on fixed small test set ----
+        for df in test_df_mini:
+            stk_moves = df.get_column("stk_moves").to_list()
+            stk_moves = jnp.asarray(stk_moves)
+            human_moves = df.get_column("human_moves").to_list()
+            human_moves = jnp.asarray(human_moves)
+            boards = df.get_column("fen_board").to_list()
+            boards = jnp.asarray(boards)
+
+            batch = {"boards": boards, "stk_moves": stk_moves, "human_moves": human_moves}
+            eval_step_ebm(model, metrics, batch)
+
+        m = metrics.compute()
+        test_acc = m['accuracy'].item(0)
+        test_loss = m['loss'].item(0)
+
+        trackio.log({
+            "Train_loss": train_loss,
+            "Train_accuracy": train_acc,
+            "Test_loss": test_loss,
+            "Test_accuracy": test_acc,
+        })
+
+        print(f"[green]Finished training:[/green] {step:4d}, "
+              f"[cyan]Accuracy:[/cyan] {test_acc:7.4f}, "
+              f"[cyan]Loss:[/cyan] {test_loss:7.4f}")
+        metrics.reset()
+
+        # checkpoints
+        if step in [32, 160, 288, 416, 544, 640] and cfg.get('checkpoint', False):
+            save_checkpoint(model, f"./checkpoints/{step}", cfg)
+
+        step += 1
+
+end_time = time.time()
+duration = end_time - start_time
+# print(f"Training took: {duration:.4f} seconds")
+

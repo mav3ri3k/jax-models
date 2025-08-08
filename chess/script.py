@@ -1,13 +1,11 @@
 import polars as pl
-import pyarrow as pa
 
-import pyarrow.ipc as ipc
-import pandas as pd
-from tqdm import tqdm
-import jax.numpy as jnp
-from checkpoint import save_checkpoint
-from upload import upload
+# Path to your Arrow file
+file_path = "./data/pre_tokenized/cache_tokenized_triplet.arrow"
 
-upload("./checkpoints/32")
+# Read the Arrow file
+df = pl.read_ipc(file_path)  # For Arrow IPC/Feather files
 
-
+# Print the first 10 rows
+for row in df.head(10).iter_rows(named=True):
+    print(row)

@@ -3,6 +3,7 @@ import time
 import chess.pgn
 import os
 import logging
+from tqdm import tqdm  # pip install tqdm
 import polars as pl
 from typing import List, Iterable
 from joblib import Parallel, delayed
@@ -100,7 +101,7 @@ class Tokenizer:
         all_chars: set[str] = set()
         for chunk_set in Parallel(n_jobs=n_jobs)(
             delayed(_chars_from_offset_batch)(batch)
-            for batch in _chunk(offsets, batch_size)
+            for batch in tqdm(_chunk(offsets, batch_size))
         ):
             all_chars.update(chunk_set)
 
@@ -109,41 +110,53 @@ class Tokenizer:
         return sorted(all_chars)
         
     @classmethod
-    def _builder_move(self) -> List:
+    def _builder_move(cls) -> List[str]:
         lg.info("Move Builder Start")
         all_uci = set()
-        # Iterate over every possible source square
+
+        # 1) Enumerate base moves for each piece from each square on an empty board
+        #    Use pseudo-legal to avoid king requirements.
+        piece_types = [
+            chess.PAWN, chess.KNIGHT, chess.BISHOP,
+            chess.ROOK, chess.QUEEN, chess.KING
+        ]
         for square in chess.SQUARES:
-            piece_types = [chess.PAWN, chess.KNIGHT, chess.BISHOP,
-                           chess.ROOK, chess.QUEEN, chess.KING]
             for pt in piece_types:
-                board = chess.Board.empty()
-                board.set_piece_at(square, chess.Piece(pt, chess.WHITE))
-                # every legal move for that single piece
-                for move in board.legal_moves:
-                    all_uci.add(move.uci())
-        # promotions
-        # promotions – captures and non-captures, BOTH colours
-        for r_from, r_to in [(1, 0), (6, 7)]:          # White & Black
+                b = chess.Board.empty()
+                b.turn = chess.WHITE  # color doesn't matter for UCI coverage
+                b.set_piece_at(square, chess.Piece(pt, chess.WHITE))
+                for mv in b.pseudo_legal_moves:
+                    all_uci.add(mv.uci())
+
+        # 2) Explicitly add ALL promotion variants (both colors, capture & non-capture)
+        #    White: rank 6 -> 7  (e7e8*)
+        #    Black: rank 1 -> 0  (e2e1*)
+        promo_pieces = (chess.QUEEN, chess.ROOK, chess.BISHOP, chess.KNIGHT)
+        for color, r_from, r_to in (
+            (chess.WHITE, 6, 7),
+            (chess.BLACK, 1, 0),
+        ):
             for f in range(8):
-                # straight
-                all_uci.add(chess.Move(
-                    chess.square(f, r_from),
-                    chess.square(f, r_to),
-                    chess.QUEEN
-                ).uci())
-                # captures left & right
+                from_sq = chess.square(f, r_from)
+
+                # Non-capture promotions (straight push): add q, r, b, n
+                to_sq = chess.square(f, r_to)
+                for promo in promo_pieces:
+                    all_uci.add(chess.Move(from_sq, to_sq, promotion=promo).uci())
+
+                # Capture promotions to the left/right: add q, r, b, n
                 for df in (-1, 1):
                     f_to = f + df
                     if 0 <= f_to < 8:
-                        for promo in (chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN):
-                            all_uci.add(chess.Move(
-                                chess.square(f, r_from),
-                                chess.square(f_to, r_to),
-                                promo
-                            ).uci())
-        # 24 castling strings that exist in the paper’s vocabulary
-        # sort
+                        to_sq = chess.square(f_to, r_to)
+                        for promo in promo_pieces:
+                            all_uci.add(chess.Move(from_sq, to_sq, promotion=promo).uci())
+
+        # 3) Add castling UCIs explicitly (UCI uses king moves)
+        #    e1g1, e1c1, e8g8, e8c8
+        for u in ("e1g1", "e1c1", "e8g8", "e8c8"):
+            all_uci.add(u)
+
         lg.info("Move Builder Finish")
         return sorted(all_uci)
 

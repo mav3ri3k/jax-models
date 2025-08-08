@@ -15,12 +15,15 @@ from pathlib import Path
 from rich.progress import track
 from rich import print
 from checkpoint import save_checkpoint, restore_checkpoint
+import modal
 
 import orbax.checkpoint as ocp
 
 from data import prepare_data, load_data
 from model import Classifier, EBM
 from train import train_step, eval_step, train_step_ebm, eval_step_ebm
+
+app = modal.App("chess")
 
 data_file = "./data/pre_tokenized/cache_tokenized.arrow"
 path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
@@ -29,7 +32,7 @@ path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
 with open("config.toml", "rb") as f:
     cfg = tomllib.load(f)
 
-# trackio.init(project="chess-encoder", name="20 EBM Batch", config=cfg)
+trackio.init(project="chess-encoder", name="20 EBM Batch", config=cfg)
 
 # model
 model = EBM(cfg, rngs=nnx.Rngs(cfg['seed']))
@@ -76,7 +79,7 @@ with open(data_file, "rb") as f:
             sys.exit()
     else:
         print(f"[yellow]Start Training from beginning[/yellow]")
-    sys.exit()
+
     for batch in reader.iter_batches_with_custom_metadata():
         if last_checkpoint != False:
             while step <= last_checkpoint:

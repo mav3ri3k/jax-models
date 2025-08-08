@@ -44,7 +44,9 @@ def restore_checkpoint(model, rel_path, step):
     download_folder(f"{step}.json", rel_path)
 
     abstract_model = nnx.eval_shape(lambda: model)
+    print(abstract_model)
     graphdef, abstract_state = nnx.split(abstract_model)
+    print(abstract_state)
 
     checkpointer = ocp.StandardCheckpointer()
     try:
@@ -52,6 +54,7 @@ def restore_checkpoint(model, rel_path, step):
             ckpt_dir,
             abstract_state
         )
+        print(state_restored)
     except FileNotFoundError as e:
         print(e)
 
