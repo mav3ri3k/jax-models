@@ -10,14 +10,14 @@ import tomllib
 import polars as pl
 import pyarrow as pa
 import pyarrow.ipc as ipc
-import trackio
+import wandb
 from pathlib import Path
 from checkpoint import save_checkpoint, restore_checkpoint
 
 import orbax.checkpoint as ocp
 
 from data import prepare_data, load_data
-from model import Classifier, EBM
+from model import Classifier, EBMChess, EBM
 from train import train_step, eval_step, train_step_ebm, eval_step_ebm
 
 # ---------- Paths ----------
@@ -29,18 +29,30 @@ path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
 with open("config.toml", "rb") as f:
     cfg = tomllib.load(f)
 
-trackio.init(project="chess-encoder", name="25 EBM Batch Lower LR", config=cfg)
+run = wandb.init(project="chess", notes="First run wandb", tags=["ebm"], config=cfg)
 
 # ---------- Model / Optimizer / Metrics ----------
-model = EBM(cfg, rngs=nnx.Rngs(cfg['seed']))
-optimizer = nnx.Optimizer(
-    model,
+model = EBMChess(cfg, rngs=nnx.Rngs(cfg['seed']))
+
+lr_schedule = optax.warmup_cosine_decay_schedule(
+    init_value= 0.0,
+    peak_value=cfg['learning_rate'],
+    warmup_steps=cfg['warmup_steps'],
+    decay_steps=cfg['total_steps'] - cfg['warmup_steps'],
+    end_value=cfg['learning_rate'] / cfg['min_lr_scale'],
+)
+tx = optax.chain(
+    optax.clip_by_global_norm(1.0),
     optax.adamw(
-        learning_rate=cfg['learning_rate'],
+        learning_rate=lr_schedule,
         b1=cfg['b1'],
         b2=cfg['b2'],
         weight_decay=cfg['weight_decay'],
     ),
+)
+optimizer = nnx.Optimizer(
+    model,
+    tx,
 )
 
 metrics = nnx.MultiMetric(
@@ -126,12 +138,11 @@ with open(data_file, "rb") as f:
         for df in df_mini:
             stk_moves = df.get_column("stk_moves").to_list()
             stk_moves = jnp.asarray(stk_moves)
-            human_moves = df.get_column("human_moves").to_list()
-            human_moves = jnp.asarray(human_moves)
+            stk_moves = jnp.squeeze(stk_moves, axis=-1)
             boards = df.get_column("fen_board").to_list()
             boards = jnp.asarray(boards)
 
-            batch = {"boards": boards, "stk_moves": stk_moves, "human_moves": human_moves}
+            batch = {"boards": boards, "stk_moves": stk_moves}
 
             train_step_ebm(model, optimizer, metrics, batch)
 
@@ -142,31 +153,30 @@ with open(data_file, "rb") as f:
         metrics.reset()
 
         # ---- eval on fixed small test set ----
-        for df in test_df_mini:
-            stk_moves = df.get_column("stk_moves").to_list()
-            stk_moves = jnp.asarray(stk_moves)
-            human_moves = df.get_column("human_moves").to_list()
-            human_moves = jnp.asarray(human_moves)
-            boards = df.get_column("fen_board").to_list()
-            boards = jnp.asarray(boards)
+        # for df in test_df_mini:
+        #     stk_moves = df.get_column("stk_moves").to_list()
+        #     stk_moves = jnp.asarray(stk_moves)
+        #     stk_moves = jnp.squeeze(stk_moves, axis=-1)
+        #     boards = df.get_column("fen_board").to_list()
+        #     boards = jnp.asarray(boards)
 
-            batch = {"boards": boards, "stk_moves": stk_moves, "human_moves": human_moves}
-            eval_step_ebm(model, metrics, batch)
+        #     batch = {"boards": boards, "stk_moves": stk_moves}
+        #     eval_step_ebm(model, metrics, batch)
 
-        m = metrics.compute()
-        test_acc = m['accuracy'].item(0)
-        test_loss = m['loss'].item(0)
-
-        trackio.log({
-            "Train_loss": train_loss,
-            "Train_accuracy": train_acc,
-            "Test_loss": test_loss,
-            "Test_accuracy": test_acc,
+        # m = metrics.compute()
+        # test_acc = m['accuracy'].item(0)
+        # test_loss = m['loss'].item(0)
+    
+        run.log({
+            # "Train_loss": train_loss,
+            # "Train_accuracy": train_acc,
+            "Test_loss": train_loss,
+            "Test_accuracy": train_acc,
         })
 
         print(f"[green]Finished training:[/green] {step:4d}, "
-              f"[cyan]Accuracy:[/cyan] {test_acc:7.4f}, "
-              f"[cyan]Loss:[/cyan] {test_loss:7.4f}")
+              f"[cyan]Accuracy:[/cyan] {train_acc:7.4f}, "
+              f"[cyan]Loss:[/cyan] {train_loss:7.4f}")
         metrics.reset()
 
         # checkpoints
@@ -177,5 +187,7 @@ with open(data_file, "rb") as f:
 
 end_time = time.time()
 duration = end_time - start_time
+run.log({"duration": duration})
+run.finish()
 # print(f"Training took: {duration:.4f} seconds")
 

@@ -33,8 +33,8 @@ with open("config.toml", "rb") as f:
 
 # model
 model = EBM(cfg, rngs=nnx.Rngs(cfg['seed']))
-# nnx.display(model)
-# sys.exit()
+nnx.display(model)
+sys.exit()
 optimizer = nnx.Optimizer(model, optax.adamw(learning_rate=cfg['learning_rate'], b1=cfg['b1'], b2=cfg['b2'], weight_decay=cfg['weight_decay']))
 
 

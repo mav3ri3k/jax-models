@@ -21,5 +21,6 @@ dependencies = [
     "rich>=14.0.0",
     "tqdm>=4.67.1",
     "trackio>=0.2.2",
+    "wandb>=0.21.3",
     "xxhash>=3.5.0",
 ]

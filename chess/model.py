@@ -163,58 +163,51 @@ class Classifier(nnx.Module):
         
         return x_BC
 
-class ProjectionHead(nnx.Module):
-    def __init__(self, cfg, *, rngs: nnx.Rngs):
-        self.gate = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['proj_head_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
-        self.value = nnx.Linear(in_features=cfg['embed_dim'], out_features=cfg['proj_head_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
-        self.out = nnx.Linear(in_features=cfg['proj_head_dim'], out_features=cfg['proj_dim'], use_bias=cfg['use_bias'], rngs=rngs) 
-
-    def __call__(self, x_BD: jnp.ndarray) -> jnp.ndarray:
-        x_BF = self.gate(x_BD)
-        x_BF = nnx.swish(x_BF)
-
-        y_BF = self.value(x_BD)
-
-        y_BF *= x_BF        
-        z_BP = self.out(y_BF)
-
-        return z_BP
-
 class EBM(nnx.Module):
     def __init__(self, cfg, *, rngs: nnx.Rngs):
         self.board_embed = nnx.Embed(num_embeddings=cfg['vocab_size'], features=cfg['embed_dim'], rngs=rngs)
-        self.class_token = nnx.Param(jax.nn.initializers.zeros(jax.random.key(cfg['seed']), (1, 1, cfg['embed_dim']), jnp.float32))
 
         self.encoder = Transformer(cfg, rngs=rngs)
+        self.out = nnx.LinearGeneral(in_features=(cfg['ctx_len'], cfg['embed_dim']), out_features=1, axis=(-2, -1), rngs=rngs)
 
-        self.head = ProjectionHead(cfg, rngs=rngs)
-
-        self.move_table = nnx.Param(
-            jax.nn.initializers.normal(stddev=0.02)(
-                jax.random.key(cfg['seed']),
-                (cfg['num_classes'], cfg['proj_dim']),
-                jnp.float32)
-        )
-        self.l_scale = nnx.Param(jnp.array(jnp.log(1/0.07), dtype=jnp.float32))
-
-    def __call__(self, b_BL):
+    def __call__(self, b_BL, m_BD):
         # embedding
         b_BLD = self.board_embed(b_BL)
+        m_BLD = m_BD[:, None, :]
 
-        # Add [class] token
-        # 
-        cls = jnp.tile(self.class_token, [b_BLD.shape[0], 1, 1])  
-        b_BLD = jnp.concatenate([cls, b_BLD], axis=1)
+        b_BLD = jnp.concatenate([m_BLD, b_BLD], axis=1)
         b_BLD = self.encoder(b_BLD)
-        b_BD = b_BLD[:, 0]
 
-        b_BP = self.head(b_BD)
+        e_BE = self.out(b_BLD)
 
-        b_BP = b_BP / jnp.linalg.norm(b_BP, axis=-1, keepdims=True)
-
-        m_CP = self.move_table.value
-        m_CP = m_CP / jnp.linalg.norm(m_CP, axis=-1, keepdims=True)
-
-        l_BC = b_BP @ m_CP.T  * jnp.exp(self.l_scale.value)
+        # e_B = jnp.squeeze(e_BE, axis=-1)
         
-        return l_BC
+        return e_BE
+
+class EBMChess(nnx.Module):
+    def __init__(self, cfg, *, rngs: nnx.Rngs):
+        self.move_embed = nnx.Embed(num_embeddings=cfg['num_classes'], features=cfg['embed_dim'], rngs=rngs)
+        self.rngs = rngs
+        self.embed_dim = cfg['embed_dim']
+        self.steps = cfg['steps']
+        self.alpha = cfg['alpha']
+        self.sigma = cfg['sigma']
+
+        self.energy_model = EBM(cfg, rngs=rngs)
+        def energy_fn(b_BL, m_BD):
+            return jnp.sum(self.energy_model(b_BL, m_BD))
+
+        self.energy_grad = nnx.grad(energy_fn, argnums=1)
+
+    def __call__(self, b_BL):
+        m_BD = jax.random.normal(self.rngs.default(), (b_BL.shape[0], self.embed_dim), dtype=jnp.float32)
+
+        for _ in range(self.steps):
+            m_BD = jax.nn.softmax(m_BD)
+            grads = self.energy_grad(b_BL, m_BD)
+            m_BD = m_BD - self.alpha * grads
+            m_BD += self.sigma * jax.random.normal(self.rngs.default(), m_BD.shape)
+
+        m_BM =  self.move_embed.attend(m_BD.astype(jnp.float32))
+
+        return m_BM

@@ -1,12 +1,15 @@
 # to be manually updated
-last_checkpoint = 32
+last_checkpoint = false
 checkpoint = false
 upload = false
 
 seed = 69
 epochs = 1
-batch_size = 512
+batch_size = 32
 learning_rate = 6e-3
+warmup_steps = 10
+total_steps = 640
+min_lr_scale = 10
 b1 = 0.9
 b2 = 0.999
 weight_decay  = 3e-3
@@ -26,3 +29,9 @@ ffn_dim = 384
 proj_dim = 64
 # 4x embed dim, recommended in simclr
 proj_head_dim = 768
+
+steps = 4
+# alpha = 2e-4
+# alpha = 1e-5
+alpha = 0.05
+sigma = 0.01
