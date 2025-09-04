@@ -6,10 +6,10 @@ import os
 import pyarrow as pa
 import pyarrow.ipc as ipc
 
-input_path = "./data/fen_boards/board_move_0.parquet"
-output_path = "./data/pre_tokenized/cache_tokenized_triplet.arrow"
+input_path = "./data/fen_boards/records.parquet"
+output_path = "./data/pre_tokenized/records_cache.arrow"
 tokenizer = Tokenizer("None")
-batch_size = 1_024
+batch_size = 32_768
 num_workers = 4  # Adjust based on CPU cores
 
 # Mock tokenizer (replace with your real one)
@@ -18,8 +18,8 @@ def process_batch(df: pl.DataFrame) -> pl.DataFrame:
     tokenized_moves = []
     for row in df.iter_rows(named=True):
         try:
-            a = tokenizer.encode(row["fen_boards"])
-            b = tokenizer.encode(row["stk_moves"])[0]
+            a = tokenizer.encode(row["board"])
+            b = tokenizer.encode(row["move"])[0]
             tokenized_boards.append(a)
             tokenized_moves.append(b)
         except AssertionError:

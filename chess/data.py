@@ -211,7 +211,6 @@ def prepare_data(force_boards=False, force_moves=False, force_tokenization=False
     else:
         lg.info("Using pre-computed parquet files for board-move pair")
 
-
 # prepare_data(force_boards=False, force_moves=True, force_tokenization=True)
 
 def load_data(pgn_source, force_new = False):

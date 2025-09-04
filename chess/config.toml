@@ -1,13 +1,14 @@
 # to be manually updated
+type = "cls"
 last_checkpoint = false
 checkpoint = false
 upload = false
 
 seed = 69
 epochs = 1
-batch_size = 32
+batch_size = 64
 learning_rate = 6e-3
-warmup_steps = 10
+warmup_steps = 64
 total_steps = 640
 min_lr_scale = 10
 b1 = 0.9
@@ -22,7 +23,7 @@ use_bias = false
 num_heads = 6
 base_f = 5_000
 embed_dim = 384
-num_classes = 1944
+num_classes = 1968
 
 ffn_dim = 384
 

@@ -22,14 +22,14 @@ from train import train_step, eval_step, train_step_ebm, eval_step_ebm
 
 # ---------- Paths ----------
 # NOTE: use the newly processed tokenized triplet file
-data_file = "./data/pre_tokenized/cache_tokenized_triplet.arrow"
+data_file = "./data/pre_tokenized/records_cache.arrow"
 path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
 
 # ---------- Config ----------
 with open("config.toml", "rb") as f:
     cfg = tomllib.load(f)
 
-run = wandb.init(project="chess", notes="First run wandb", tags=["ebm"], config=cfg)
+run = wandb.init(project="chess", notes="Warmup-32 steps", tags=["ebm"], config=cfg)
 
 # ---------- Model / Optimizer / Metrics ----------
 model = EBMChess(cfg, rngs=nnx.Rngs(cfg['seed']))
@@ -72,11 +72,11 @@ def df_to_batch(df: pl.DataFrame):
       - dict with 'boards': jnp.int32 [B, L], 'moves': jnp.int32 [B]
     """
     # Boards
-    boards_list = df.get_column("fen_board").to_list()  # list[list[int]]
+    boards_list = df.get_column("boards").to_list()  # list[list[int]]
     boards = jnp.asarray(boards_list, dtype=jnp.int32)
 
     # Moves (take the first token of each list)
-    move_lists = df.get_column("stk_moves").to_list()   # list[list[int]]
+    move_lists = df.get_column("moves").to_list()   # list[list[int]]
     try:
         moves_vec = jnp.asarray([mv[0] for mv in move_lists], dtype=jnp.int32)
     except Exception as e:
@@ -84,8 +84,8 @@ def df_to_batch(df: pl.DataFrame):
         raise ValueError("Expected each 'stk_moves' row to be a single-token list. "
                          "Found an empty or malformed entry.") from e
 
+    print(boards, moves)
     return {"boards": boards, "moves": moves_vec}
-
 
 # ---------- Build a small test set once (from the same file) ----------
 # obtain test set
@@ -136,10 +136,10 @@ with open(data_file, "rb") as f:
 
         # ---- train over this Arrow batch ----
         for df in df_mini:
-            stk_moves = df.get_column("stk_moves").to_list()
+            stk_moves = df.get_column("moves").to_list()
             stk_moves = jnp.asarray(stk_moves)
-            stk_moves = jnp.squeeze(stk_moves, axis=-1)
-            boards = df.get_column("fen_board").to_list()
+            # stk_moves = jnp.squeeze(stk_moves, axis=-1)
+            boards = df.get_column("boards").to_list()
             boards = jnp.asarray(boards)
 
             batch = {"boards": boards, "stk_moves": stk_moves}
@@ -156,7 +156,7 @@ with open(data_file, "rb") as f:
         # for df in test_df_mini:
         #     stk_moves = df.get_column("stk_moves").to_list()
         #     stk_moves = jnp.asarray(stk_moves)
-        #     stk_moves = jnp.squeeze(stk_moves, axis=-1)
+            # stk_moves = jnp.squeeze(stk_moves, axis=-1)
         #     boards = df.get_column("fen_board").to_list()
         #     boards = jnp.asarray(boards)
 

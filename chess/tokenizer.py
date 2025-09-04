@@ -160,10 +160,70 @@ class Tokenizer:
         lg.info("Move Builder Finish")
         return sorted(all_uci)
 
+    @classmethod
+    def build_all_uci(cls) -> List[str]:
+        lg.info("Move Builder Start")
+        all_uci: Set[str] = set()
+
+        # 1) Enumerate pseudo-legal moves for each piece on an empty board, for BOTH colors.
+        piece_types = [
+            chess.PAWN, chess.KNIGHT, chess.BISHOP,
+            chess.ROOK, chess.QUEEN, chess.KING
+        ]
+        for square in chess.SQUARES:
+            for pt in piece_types:
+                for color in (chess.WHITE, chess.BLACK):
+                    b = chess.Board.empty()
+                    b.turn = color
+                    b.set_piece_at(square, chess.Piece(pt, color))
+                    for mv in b.pseudo_legal_moves:
+                        all_uci.add(mv.uci())
+
+        # 2) Explicitly add ALL promotion variants (both colors, capture & non-capture).
+        #    White promotes: rank 6 -> 7 (0-based)  i.e., 7th rank to 8th
+        #    Black promotes: rank 1 -> 0           i.e., 2nd rank to 1st
+        promo_pieces = (chess.QUEEN, chess.ROOK, chess.BISHOP, chess.KNIGHT)
+
+        def add_promotions(r_from: int, r_to: int):
+            for f in range(8):
+                from_sq = chess.square(f, r_from)
+
+                # non-capture promotions on same file
+                to_sq = chess.square(f, r_to)
+                for promo in promo_pieces:
+                    all_uci.add(chess.Move(from_sq, to_sq, promotion=promo).uci())
+
+                # capture promotions to adjacent files (if in board)
+                for df in (-1, 1):
+                    f_to = f + df
+                    if 0 <= f_to < 8:
+                        to_sq = chess.square(f_to, r_to)
+                        for promo in promo_pieces:
+                            all_uci.add(chess.Move(from_sq, to_sq, promotion=promo).uci())
+
+        # White: 6 -> 7
+        add_promotions(6, 7)
+        # Black: 1 -> 0
+        add_promotions(1, 0)
+
+        # 3) Add castling UCIs explicitly (UCI uses king moves)
+        for u in ("e1g1", "e1c1", "e8g8", "e8c8"):
+            all_uci.add(u)
+
+        # Sanity checks for some underpromotion edge cases you mentioned
+        must_have = {"d2d1n", "a2a1r", "h2h1n", "g2g1b", "b2b1r"}
+        missing = must_have - all_uci
+        if missing:
+            lg.warning(f"Missing expected promotions: {sorted(missing)}")
+
+        lg.info("Move Builder Finish")
+        return sorted(all_uci)
+
     def __init__(self, pgn_source, force_new = False):
         lg.info("Tokenizer Initialized")
         if not os.path.isfile("./data/tokenizer.parquet") or force_new:
-            all_uci = self._builder_move()
+            # all_uci = self._builder_move()
+            all_uci = self.build_all_uci()
             start_time = time.time()
             all_chars = self._builder_fen(pgn_source)
             duration = time.time() - start_time
@@ -180,7 +240,7 @@ class Tokenizer:
             df = pl.DataFrame(vocab, schema={"idx": pl.Int16, "tokens": pl.String})
             df.write_parquet("./data/tokenizer.parquet")
 
-    def encode(self, tokens: str, save_at="./data/tokenizer.parquet") -> List[int]:
+    def encode(self, tokens: str, save_at="./data/tokenizer_new.parquet") -> List[int]:
         """Supports both fen string and move string"""
         # lg.debug(f"Encoder Saved at: {save_at}")
         df = pl.read_parquet(save_at)

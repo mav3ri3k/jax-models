@@ -17,13 +17,13 @@ def train_step(model: Classifier, optimizer: nnx.Optimizer, metrics: nnx.MultiMe
   """Train for a single step."""
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
   (loss, logits), grads = grad_fn(model, batch)
-  metrics.update(loss=loss, logits=logits, labels=batch['moves'])  # In-place updates.
+  metrics.update(loss=loss, logits=logits, labels=batch['stk_moves'])  # In-place updates.
   optimizer.update(grads)  # In-place updates.
 
 @nnx.jit
 def eval_step(model: Classifier, metrics: nnx.MultiMetric, batch):
   loss, logits = loss_fn(model, batch)
-  metrics.update(loss=loss, logits=logits, labels=batch['moves'])  # In-place updates.
+  metrics.update(loss=loss, logits=logits, labels=batch['stk_moves'])  # In-place updates.
 
 #---  
 # ebm
