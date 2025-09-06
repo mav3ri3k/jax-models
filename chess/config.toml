@@ -1,15 +1,20 @@
 # to be manually updated
 type = "cls"
 last_checkpoint = false
-checkpoint = false
+checkpoint = true
+chk_force_save = true
 upload = false
+
+size = "small"
 
 seed = 69
 epochs = 1
 batch_size = 64
 learning_rate = 6e-3
-warmup_steps = 64
-total_steps = 640
+warmup_steps = 4096
+# warmup_steps = 32
+# total_steps = 64
+total_steps = 65_536
 min_lr_scale = 10
 b1 = 0.9
 b2 = 0.999
@@ -18,21 +23,21 @@ eval = false
 vocab_size = 32
 ctx_len = 77
 
-layers = 6
+layers = 12
 use_bias = false
-num_heads = 6
+num_heads = 12
 base_f = 5_000
-embed_dim = 384
+embed_dim = 768
 num_classes = 1968
 
-ffn_dim = 384
+ffn_dim = 768
 
 proj_dim = 64
 # 4x embed dim, recommended in simclr
 proj_head_dim = 768
 
-steps = 4
+steps = 2
 # alpha = 2e-4
 # alpha = 1e-5
-alpha = 0.05
+alpha = 0.06
 sigma = 0.01

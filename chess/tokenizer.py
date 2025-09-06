@@ -264,11 +264,15 @@ class Tokenizer:
 
         return [df_filter["idx"].item() - 32]
 
-    def decode(self, token_ids: List[int], read_from="./data/tokenizer.parquet") -> str:
-        lg.debug(f"Decoder Read_from: {read_from}")
+    def decode(self, token_id, read_from="./data/tokenizer_new.parquet") -> str:
+        # lg.debug(f"Decoder Read_from: {read_from}")
         df = pl.read_parquet(read_from)
-        lg.info(f"Dataframe schema found: {df.schema}")
+        # lg.info(f"Dataframe schema found: {df.schema}")
 
+        # assume only decode moves
+
+        df_filter = df.filter(pl.col("idx") == (token_id + 32))
+        return df_filter["tokens"].item()
         tokens: List[str] = []
         for token_id in token_ids:
             df_filter = df.filter(pl.col("idx") == token_id)

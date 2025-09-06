@@ -11,6 +11,7 @@ gpu = "L40S"
 volume = modal.Volume.from_name("chess_data", create_if_missing=False)
 volume_path = PosixPath("/vol")
 volume_data_path = volume_path / "data"
+chk_path = volume_path / "checkpoint"
 model_save_path = volume_path / "models"
 data_file_path = volume_data_path / "records_cache.arrow"
 
@@ -34,14 +35,6 @@ image = (
     # .run_commands("git clone https://github.com/modal-labs/agi && echo 'ready to go!'")
 )
 
-# image = image.add_local_file(
-#     Path(__file__).parent / "./train.py", remote_path=volume_path / "train.py"
-# )
-# image = image.add_local_file(
-#     Path(__file__).parent / "./model.py", remote_path=volume_path / "model.py"
-# )
-
-
 with image.imports():
     import os
     import sys
@@ -56,7 +49,7 @@ with image.imports():
     import pyarrow.ipc as ipc
     import wandb
     from pathlib import Path
-    from checkpoint import save_checkpoint, restore_checkpoint
+    from checkpoint import save_checkpoint_modal, restore_checkpoint_modal
 
     import orbax.checkpoint as ocp
 
@@ -70,11 +63,11 @@ with image.imports():
     timeout=30 * MINUTES,
     secrets=[modal.Secret.from_name("wandb-secret")]
 )
-def train_model(cfg, data_file_path):
+def train_model(cfg, data_file_path, chk_path):
     data_file = data_file_path
     # path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
 
-    run = wandb.init(project="chess", name="Baseline", notes="Transformer Baseline", tags=["ebm"], config=cfg)
+    run = wandb.init(project="chess", name="4098", notes="4098 steps", tags=[cfg['type']], config=cfg)
 
     # ---------- Model / Optimizer / Metrics ----------
     if cfg['type'] == "cls":
@@ -86,8 +79,8 @@ def train_model(cfg, data_file_path):
         init_value= 0.0,
         peak_value=cfg['learning_rate'],
         warmup_steps=cfg['warmup_steps'],
-        decay_steps=cfg['total_steps'] - cfg['warmup_steps'],
-        end_value=cfg['learning_rate'] / cfg['min_lr_scale'],
+        decay_steps=cfg['total_steps'],
+        end_value=0,
     )
     tx = optax.chain(
         optax.clip_by_global_norm(1.0),
@@ -149,7 +142,6 @@ def train_model(cfg, data_file_path):
                 test_df_mini = [df[i:i+batch_size] for i in range(0, df.height, batch_size)]
                 test_i += 1
                 break
-
     # ---------- Training Loop ----------
     with open(data_file, "rb") as f:
         reader = ipc.RecordBatchStreamReader(f)
@@ -159,7 +151,7 @@ def train_model(cfg, data_file_path):
         last_checkpoint = cfg['last_checkpoint']
         if last_checkpoint is not False:
             try:
-                model = restore_checkpoint(model, f"./checkpoints/{last_checkpoint}", last_checkpoint)
+                model = restore_checkpoint_modal(model, chk_path / cfg['type'] / cfg['size'] / f"{last_checkpoint}", last_checkpoint)
                 print(f"[yellow]Start Training from {last_checkpoint}[/yellow]")
             except UnboundLocalError:
                 print(f"[red]last_checkpoint: {last_checkpoint} given in config does not exist[/red]")
@@ -167,12 +159,8 @@ def train_model(cfg, data_file_path):
         else:
             print(f"[yellow]Start Training from beginning[/yellow]")
 
-        for batch in reader.iter_batches_with_custom_metadata():  # (RecordBatch)
-            # skip ahead if resuming
-            if last_checkpoint is not False and step <= last_checkpoint:
-                step += 1
-                continue
 
+        for batch in reader.iter_batches_with_custom_metadata():  # (RecordBatch)
             df = pl.from_arrow(batch[0])  # columns: fen_board, stk_moves, human_moves (all tokenized)
             # chunk into mini-batches
             df_mini = [df[i:i+batch_size] for i in range(0, df.height, batch_size)]
@@ -184,6 +172,11 @@ def train_model(cfg, data_file_path):
 
             # ---- train over this Arrow batch ----
             for df in df_mini:
+                # skip ahead if resuming
+                if last_checkpoint is not False and step <= last_checkpoint:
+                    step += 1
+                    continue
+
                 stk_moves = df.get_column("moves").to_list()
                 stk_moves = jnp.asarray(stk_moves)
                 # stk_moves = jnp.squeeze(stk_moves, axis=-1)
@@ -197,44 +190,54 @@ def train_model(cfg, data_file_path):
                 else:
                     train_step_ebm(model, optimizer, metrics, batch)
 
-            # log train metrics
-            m = metrics.compute()
-            train_acc = m['accuracy'].item(0)
-            train_loss = m['loss'].item(0)
-            metrics.reset()
+                # log train metrics
+                m = metrics.compute()
+                train_acc = m['accuracy'].item(0)
+                train_loss = m['loss'].item(0)
+                metrics.reset()
 
-            # ---- eval on fixed small test set ----
-            # for df in test_df_mini:
-            #     stk_moves = df.get_column("stk_moves").to_list()
-            #     stk_moves = jnp.asarray(stk_moves)
-                # stk_moves = jnp.squeeze(stk_moves, axis=-1)
-            #     boards = df.get_column("fen_board").to_list()
-            #     boards = jnp.asarray(boards)
+                # ---- eval on fixed small test set ----
+                # for df in test_df_mini:
+                #     stk_moves = df.get_column("stk_moves").to_list()
+                #     stk_moves = jnp.asarray(stk_moves)
+                    # stk_moves = jnp.squeeze(stk_moves, axis=-1)
+                #     boards = df.get_column("fen_board").to_list()
+                #     boards = jnp.asarray(boards)
 
-            #     batch = {"boards": boards, "stk_moves": stk_moves}
-            #     eval_step_ebm(model, metrics, batch)
+                #     batch = {"boards": boards, "stk_moves": stk_moves}
+                #     eval_step_ebm(model, metrics, batch)
 
-            # m = metrics.compute()
-            # test_acc = m['accuracy'].item(0)
-            # test_loss = m['loss'].item(0)
+                # m = metrics.compute()
+                # test_acc = m['accuracy'].item(0)
+                # test_loss = m['loss'].item(0)
     
-            run.log({
-                # "Train_loss": train_loss,
-                # "Train_accuracy": train_acc,
-                "Test_loss": train_loss,
-                "Test_accuracy": train_acc,
-            })
+                run.log({
+                    # "Train_loss": train_loss,
+                    # "Train_accuracy": train_acc,
+                    "Test_loss": train_loss,
+                    "Test_accuracy": train_acc,
+                    "Learning_Rate": float(lr_schedule(step-1)),
+                })
 
-            print(f"[green]Finished training:[/green] {step:4d}, "
-                  f"[cyan]Accuracy:[/cyan] {train_acc:7.4f}, "
-                  f"[cyan]Loss:[/cyan] {train_loss:7.4f}")
-            metrics.reset()
+                print(f"[green]Finished training:[/green] {step:4d}, "
+                      f"[cyan]Accuracy:[/cyan] {train_acc:7.4f}, "
+                      f"[cyan]Loss:[/cyan] {train_loss:7.4f}")
+                metrics.reset()
 
-            # checkpoints
-            if step in [32, 160, 288, 416, 544, 640] and cfg.get('checkpoint', False):
-                save_checkpoint(model, f"./checkpoints/{step}", cfg)
+                # checkpoints
+                if step in [64, 256, 1024, 4096, 8192, 12000, 20000, 32768, 64000, 65536] and cfg.get('checkpoint', False):
+                    
+                    save_checkpoint_modal(model, chk_path / cfg['type'] / cfg['size'] / f"{step}", cfg)
 
-            step += 1
+                if step >= cfg['total_steps']:
+                    print("[red]Stopping[/red]", step, cfg['total_steps'])
+                    break
+
+                step += 1
+            
+            if step >= cfg['total_steps']:
+                print("[red]Stopping[/red]", step, cfg['total_steps'])
+                break
 
     end_time = time.time()
     duration = end_time - start_time
@@ -247,4 +250,4 @@ def main():
     # ---------- Config ----------
     with open("config.toml", "rb") as f:
         cfg = tomllib.load(f)
-    train_model.remote(cfg, data_file_path)
+    train_model.remote(cfg, data_file_path, chk_path)
