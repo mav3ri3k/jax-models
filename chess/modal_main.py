@@ -67,7 +67,7 @@ def train_model(cfg, data_file_path, chk_path):
     data_file = data_file_path
     # path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
 
-    run = wandb.init(project="chess", name="4098", notes="4098 steps", tags=[cfg['type']], config=cfg)
+    run = wandb.init(project="chess", name="xxs-4098", notes="4098 steps", tags=[cfg['type']], config=cfg)
 
     # ---------- Model / Optimizer / Metrics ----------
     if cfg['type'] == "cls":

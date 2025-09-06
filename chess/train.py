@@ -25,6 +25,10 @@ def eval_step(model: Classifier, metrics: nnx.MultiMetric, batch):
   loss, logits = loss_fn(model, batch)
   metrics.update(loss=loss, logits=logits, labels=batch['stk_moves'])  # In-place updates.
 
+@nnx.jit
+def model_cls_run(model, board):
+  return model(board)
+
 #---  
 # ebm
 

@@ -5,7 +5,7 @@ checkpoint = true
 chk_force_save = true
 upload = false
 
-size = "small"
+size = "xxs"
 
 seed = 69
 epochs = 1
@@ -23,14 +23,14 @@ eval = false
 vocab_size = 32
 ctx_len = 77
 
-layers = 12
+layers = 6
 use_bias = false
-num_heads = 12
+num_heads = 6
 base_f = 5_000
-embed_dim = 768
+embed_dim = 384
 num_classes = 1968
 
-ffn_dim = 768
+ffn_dim = 384
 
 proj_dim = 64
 # 4x embed dim, recommended in simclr

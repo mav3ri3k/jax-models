@@ -93,7 +93,6 @@ def restore_checkpoint_shard(model, path, step):
     abstract_model = nnx.eval_shape(lambda: model)
     graphdef, abstract_state = nnx.split(abstract_model)
     abstract_state = nnx.state(abstract_model)
-    print(type(abstract_state))
     # print(abstract_state)
 
     device = jax.local_devices()[0]
