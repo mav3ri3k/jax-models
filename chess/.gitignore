@@ -2,6 +2,7 @@
 checkpoints/
 data/
 wandb/
+docs/
 **/*.bag
 **/*.pgn
 **/*.zst

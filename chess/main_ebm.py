@@ -13,7 +13,8 @@ import pyarrow.ipc as ipc
 import wandb
 from pathlib import Path
 from checkpoint import save_checkpoint, restore_checkpoint
-
+os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=8'
+print(jax.devices())
 import orbax.checkpoint as ocp
 
 from data import prepare_data, load_data
@@ -29,11 +30,12 @@ path = ocp.test_utils.erase_and_create_empty('./checkpoints/')
 with open("config.toml", "rb") as f:
     cfg = tomllib.load(f)
 
-run = wandb.init(project="chess", notes="Warmup-32 steps", tags=["ebm"], config=cfg)
+# run = wandb.init(project="chess", notes="Warmup-32 steps", tags=["ebm"], config=cfg)
 
 # ---------- Model / Optimizer / Metrics ----------
 model = EBMChess(cfg, rngs=nnx.Rngs(cfg['seed']))
-
+# jax.debug.visualize_array_sharding(model.energy_model.encoder.blocks[0].ffn.out.kernel.value)
+# sys.exit()
 lr_schedule = optax.warmup_cosine_decay_schedule(
     init_value= 0.0,
     peak_value=cfg['learning_rate'],

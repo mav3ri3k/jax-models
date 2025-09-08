@@ -1,8 +1,8 @@
 # to be manually updated
 type = "cls"
 last_checkpoint = false
-checkpoint = true
-chk_force_save = true
+checkpoint = false
+chk_force_save = false
 upload = false
 
 size = "xxs"

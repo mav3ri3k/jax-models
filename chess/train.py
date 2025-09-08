@@ -17,6 +17,16 @@ def train_step(model: Classifier, optimizer: nnx.Optimizer, metrics: nnx.MultiMe
   """Train for a single step."""
   grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
   (loss, logits), grads = grad_fn(model, batch)
+
+  # --- DEBUG SHARDING: logits ---
+  jax.debug.callback(lambda s: print("\n[DEBUG] logits sharding:\n", s),
+                     jax.debug.visualize_array_sharding(logits))
+
+  # --- DEBUG SHARDING: one gradient leaf ---
+  g0 = tree_leaves(grads)[0]
+  jax.debug.callback(lambda s: print("\n[DEBUG] first grad leaf sharding:\n", s),
+                     jax.debug.visualize_array_sharding(g0))
+  
   metrics.update(loss=loss, logits=logits, labels=batch['stk_moves'])  # In-place updates.
   optimizer.update(grads)  # In-place updates.
 
