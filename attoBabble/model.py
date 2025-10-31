@@ -34,19 +34,11 @@ class TBlock(nnx.Module):
         self.ln1 = nnx.LayerNorm(num_features=cfg['D'], use_bias=True, rngs=rngs)
         self.ln2 = nnx.LayerNorm(num_features=cfg['D'], use_bias=True, rngs=rngs)
 
-    def __call__(self, in_BLD: jnp.ndarray) -> jnp.ndarray:
-        # order of layernorm based on palm
-        # parallel formulation
-        x_BLD = self.ln1(in_BLD)
-        x_BLD = self.atn(x_BLD)
-
-        y_BLD = self.ln2(in_BLD)
-        x_BLD += y_BLD 
-
-        z_BLD = self.ffn(x_BLD) 
-        z_BLD += x_BLD
-
-        return z_BLD
+    def __call__(self, x_BLD: jnp.ndarray) -> jnp.ndarray:
+        # PaLM-style parallel block: x + Attn(LN1(x)) + FFN(LN2(x))
+        a_BLD = self.atn(self.ln1(x_BLD))
+        f_BLD = self.ffn(self.ln2(x_BLD))
+        return x_BLD + a_BLD + f_BLD
 
            
 class Attention(nnx.Module):
