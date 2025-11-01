@@ -1,12 +1,13 @@
 seed = 69 # pefect seed
-first = false # whether to download input.txt and initiate tokenizer
+first = true # whether to download input.txt and initiate tokenizer
 
 # data
+epoch = 100
 train = 0.8
 test = 0.2
-V = 8_000 # vocablury size
-L = 512   # Max input len
-B = 8    # Batch size
+V = 2048 # vocablury size
+L = 256   # Max input len
+B = 64    # Batch size
 
 # optimizer
 Lr = 3e-4 # learning rate
@@ -16,3 +17,7 @@ D = 128   # Input dimension
 H = 2     # num of attention heads
 N = 8     # Number of transformer blocks
 Dh = 512  # Dimension for ffn
+
+# sampling
+tmp = 0.8
+p = 0.9

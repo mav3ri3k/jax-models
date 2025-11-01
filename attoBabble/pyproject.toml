@@ -10,6 +10,8 @@ dependencies = [
     "jax==0.4.38",
     "optax>=0.2.4",
     "polars>=1.30.0",
+    "requests>=2.32.5",
+    "rich>=14.0.0",
     "sentencepiece>=0.2.0",
     "tqdm>=4.67.1",
 ]
