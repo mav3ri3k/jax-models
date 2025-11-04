@@ -1,11 +1,11 @@
 seed = 69 # pefect seed
-first = false # whether to download input.txt and initiate tokenizer
+first = true # whether to download input.txt and initiate tokenizer
 
 # data
-epoch = 100
+epoch = 30
 train = 0.8
 test = 0.2
-V = 2048 # vocablury size
+V = 2048  # vocablury size
 L = 256   # Max input len
 B = 64    # Batch size
 
@@ -21,3 +21,4 @@ Dh = 512  # Dimension for ffn
 # sampling
 tmp = 0.8
 p = 0.9
+gen_len = 100

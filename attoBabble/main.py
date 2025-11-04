@@ -12,7 +12,7 @@ def main():
     with open("config.toml", "rb") as f:
         cfg = tomllib.load(f)
 
-    if cfg['first'] == True:
+    if cfg['first']:
         download_shakespeare()
         train_tokenizer()
         
@@ -34,6 +34,6 @@ def main():
         print(i, loss)
         i += 1
 
-    chat(model, get_tokenizer(), 10, cfg)
+    chat(model, get_tokenizer(), cfg['gen_len'], cfg)
 
 main()

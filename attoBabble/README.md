@@ -23,3 +23,17 @@ In `pyproject.toml`
   +  "jax[tpu]",
   ```
 Run `uv sync` again
+
+# Prompts to Try
+ROMEO:
+HAMLET:
+
+What news, good friend?
+She wept, yet smiled again, for
+A knocking at the gate.
+
+Love is a
+Fortune smiles upon
+
+Email from the king:
+The robot said,
