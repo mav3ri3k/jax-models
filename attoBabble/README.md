@@ -1,5 +1,7 @@
 This is a small language model meant for experimenting.
 
+*Try on google colab!*: [attoBabble](https://colab.research.google.com/drive/1knhMolrlt2-UHq4J5W1VV3dpiCFKZXSG?usp=sharing)
+
 # Get started
 ```bash
 git clone https://github.com/mav3ri3k/jax-models.git
