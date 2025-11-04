@@ -1,5 +1,5 @@
 seed = 69 # pefect seed
-first = true # whether to download input.txt and initiate tokenizer
+first = false # whether to download input.txt and initiate tokenizer
 
 # data
 epoch = 100
@@ -13,7 +13,7 @@ B = 64    # Batch size
 Lr = 3e-4 # learning rate
 
 # model
-D = 128   # Input dimension
+D = 384   # Input dimension
 H = 2     # num of attention heads
 N = 8     # Number of transformer blocks
 Dh = 512  # Dimension for ffn

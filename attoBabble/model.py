@@ -10,7 +10,7 @@ class Transformer(nnx.Module):
 
         self.blocks = [TBlock(cfg=cfg, rngs=rngs) for _ in range(self.N)]
 
-        self.out_ln = nnx.LayerNorm(num_features=cfg['D'], use_bias=False, use_scale=False, rngs=rngs)
+        self.out_ln = nnx.RMSNorm(num_features=cfg['D'],  rngs=rngs)
 
 
     def __call__(self, x_BL):
@@ -31,8 +31,8 @@ class TBlock(nnx.Module):
     def __init__(self, cfg, *, rngs=nnx.Rngs):
         self.atn = Attention(cfg=cfg, rngs=rngs)
         self.ffn = Ffn(cfg=cfg, rngs=rngs)
-        self.ln1 = nnx.LayerNorm(num_features=cfg['D'], use_bias=True, rngs=rngs)
-        self.ln2 = nnx.LayerNorm(num_features=cfg['D'], use_bias=True, rngs=rngs)
+        self.ln1 = nnx.RMSNorm(num_features=cfg['D'], rngs=rngs)
+        self.ln2 = nnx.RMSNorm(num_features=cfg['D'], rngs=rngs)
 
     def __call__(self, x_BLD: jnp.ndarray) -> jnp.ndarray:
         # PaLM-style parallel block: x + Attn(LN1(x)) + FFN(LN2(x))
@@ -71,12 +71,18 @@ class Attention(nnx.Module):
 
 class Ffn(nnx.Module):
     def __init__(self, cfg, *, rngs: nnx.Rngs):
-        self.linear1 = nnx.Linear(in_features=cfg['D'], out_features=cfg['Dh'], use_bias=False, rngs=rngs) 
-        self.linear2 = nnx.Linear(in_features=cfg['Dh'], out_features=cfg['D'], use_bias=False, rngs=rngs) 
+        self.gate = nnx.Linear(in_features=cfg['D'], out_features=cfg['Dh'], use_bias=False, rngs=rngs) 
+        self.value = nnx.Linear(in_features=cfg['D'], out_features=cfg['Dh'], use_bias=False, rngs=rngs) 
+        self.out = nnx.Linear(in_features=cfg['Dh'], out_features=cfg['D'], use_bias=False, rngs=rngs) 
 
     def __call__(self, x_BLD: jnp.ndarray) -> jnp.ndarray:
-        x_BLF = self.linear1(x_BLD)
-        x_BLF = nnx.gelu(x_BLF)
-        x_BLD = self.linear2(x_BLF)
+        x_BLF = self.gate(x_BLD)
+        x_BLF = nnx.swish(x_BLF)
 
-        return x_BLD
+        y_BLF = self.value(x_BLD)
+
+        y_BLF *= x_BLF        
+        z_BLD = self.out(y_BLF)
+
+        return z_BLD
+
